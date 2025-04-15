@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
-import { french_instructions, spanish_instructions, tagalog_instructions, english_instructions, mandarin_instructions } from '../utils/translation_prompts.js';
+import { instructions } from '../utils/prompt.js';
 import { WavRecorder } from '../lib/wavtools/index.js';
 import './Styles.scss';
 import { io, Socket } from 'socket.io-client';
@@ -19,22 +19,8 @@ interface RealtimeEvent {
 }
 
 // Define language codes and their corresponding instructions
-const languageConfigs = [
-  { code: 'fr', instructions: french_instructions },
-  { code: 'es', instructions: spanish_instructions },
-  { code: 'tl', instructions: tagalog_instructions },
-  { code: 'en', instructions: english_instructions },
-  { code: 'zh', instructions: mandarin_instructions },
-];
 
-// Map language codes to full names
-const languageNames: Record<string, string> = {
-  fr: 'French',
-  es: 'Spanish',
-  tl: 'Tagalog',
-  en: 'English',
-  zh: 'Mandarin',
-};
+
 
 // SpeakerPage component handles real-time audio recording and streaming for multiple languages
 export function SpeakerPage() {
@@ -53,21 +39,17 @@ export function SpeakerPage() {
   const socketRef = useRef<Socket | null>(null);
 
   // Create a map of client references using the language codes
-  const clientRefs = useRef(
-    languageConfigs.reduce((acc, { code }) => {
-      acc[code] = new RealtimeClient({
-        apiKey: OPENAI_API_KEY,
-        dangerouslyAllowAPIKeyInBrowser: true,
-      });
-      return acc;
-    }, {} as Record<string, RealtimeClient>)
-  ).current;
+  const clientRefs = useRef({
+    en: new RealtimeClient({
+      apiKey: OPENAI_API_KEY,
+      dangerouslyAllowAPIKeyInBrowser: true,
+    })
+  }).current;
 
-  // Update languageConfigs to include client references
-  const updatedLanguageConfigs = languageConfigs.map(config => ({
-    ...config,
-    clientRef: { current: clientRefs[config.code] }
-  }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updatedLanguageConfigs = [{
+    code: 'en', instructions,  clientRef: { current: clientRefs.en }
+  }];
 
   // Function to connect to the conversation and set up real-time clients
   const connectConversation = useCallback(async () => {
@@ -203,7 +185,7 @@ export function SpeakerPage() {
         clientRef.current.reset();
       }
     };
-  }, [french_instructions, spanish_instructions, tagalog_instructions, english_instructions, mandarin_instructions]);
+  }, [instructions]);
 
   const handleRealtimeEvent = (ev: RealtimeEvent, languageCode: string) => {
     // Check if the event type is a completed audio transcript
@@ -273,7 +255,6 @@ export function SpeakerPage() {
             <tbody>
               {transcripts.map(({ transcript, language }, index) => (
                 <tr key={index}>
-                  <td>{languageNames[language]}</td>
                   <td>
                     <div className="transcript-box">{transcript}</div>
                   </td>

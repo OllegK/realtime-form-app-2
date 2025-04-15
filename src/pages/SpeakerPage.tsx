@@ -18,10 +18,6 @@ interface RealtimeEvent {
   count?: number;
 }
 
-// Define language codes and their corresponding instructions
-
-
-
 // SpeakerPage component handles real-time audio recording and streaming for multiple languages
 export function SpeakerPage() {
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
@@ -38,18 +34,10 @@ export function SpeakerPage() {
 
   const socketRef = useRef<Socket | null>(null);
 
-  // Create a map of client references using the language codes
-  const clientRefs = useRef({
-    en: new RealtimeClient({
-      apiKey: OPENAI_API_KEY,
-      dangerouslyAllowAPIKeyInBrowser: true,
-    })
-  }).current;
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const updatedLanguageConfigs = [{
-    code: 'en', instructions,  clientRef: { current: clientRefs.en }
-  }];
+  const clientRef = useRef(new RealtimeClient({
+    apiKey: OPENAI_API_KEY,
+    dangerouslyAllowAPIKeyInBrowser: true,
+  }));
 
   // Function to connect to the conversation and set up real-time clients
   const connectConversation = useCallback(async () => {
@@ -66,7 +54,6 @@ export function SpeakerPage() {
     }
   }, []);
 
-  // Function to disconnect from the conversation and stop real-time clients
   const disconnectConversation = useCallback(async () => {
     try {
       setIsConnected(false);
@@ -81,19 +68,13 @@ export function SpeakerPage() {
 
   // Function to connect and set up all clients
   const connectAndSetupClients = async () => {
-    for (const { clientRef } of updatedLanguageConfigs) {
-      const client = clientRef.current;
-      await client.realtime.connect({ model: DEFAULT_REALTIME_MODEL });
-      await client.updateSession({ voice: DEFAULT_REALTIME_VOICE });
-    }
+    const client = clientRef.current;
+    await client.realtime.connect({ model: DEFAULT_REALTIME_MODEL });
+    await client.updateSession({ voice: DEFAULT_REALTIME_VOICE });
   };
 
   // Function to disconnect all clients
-  const disconnectClients = async () => {
-    for (const { clientRef } of updatedLanguageConfigs) {
-      clientRef.current.disconnect();
-    }
-  };
+  const disconnectClients = async () => clientRef.current.disconnect();
 
   const startRecording = async () => {
     setIsRecording(true);
@@ -101,9 +82,7 @@ export function SpeakerPage() {
 
     await wavRecorder.record((data) => {
       // Send mic PCM to all clients
-      updatedLanguageConfigs.forEach(({ clientRef }) => {
-        clientRef.current.appendInputAudio(data.mono);
-      });
+      clientRef.current.appendInputAudio(data.mono);
     });
   };
 
@@ -116,9 +95,7 @@ export function SpeakerPage() {
     }
 
     // Create response for all clients
-    updatedLanguageConfigs.forEach(({ clientRef }) => {
-      clientRef.current.createResponse();
-    });
+    clientRef.current.createResponse();
   };
 
   const changeTurnEndType = async (value: string) => {
@@ -127,31 +104,22 @@ export function SpeakerPage() {
     if (value === 'none') {
       // If 'none' is selected, pause the recorder and disable turn detection for all clients
       await wavRecorder.pause();
-      updatedLanguageConfigs.forEach(({ clientRef }) => {
-        clientRef.current.updateSession({ turn_detection: null });
-      });
+      clientRef.current.updateSession({ turn_detection: null });
       // Allow manual push-to-talk
       setCanPushToTalk(true);
     } else {
       // If 'server_vad' is selected, enable server-based voice activity detection for all clients
-      updatedLanguageConfigs.forEach(({ clientRef }) => {
-        clientRef.current.updateSession({ turn_detection: { type: 'server_vad' } });
-      });
+      clientRef.current.updateSession({ turn_detection: { type: 'server_vad' } });
       await wavRecorder.record((data) => {
-        updatedLanguageConfigs.forEach(({ clientRef }) => {
           clientRef.current.appendInputAudio(data.mono);
-        });
       });
       setCanPushToTalk(false);
     }
   };
 
-  const toggleTranscriptsVisibility = () => {
-    setShowTranscripts((prev) => !prev);
-  };
+  const toggleTranscriptsVisibility = () => setShowTranscripts((prev) => !prev);
 
   useEffect(() => {
-    // Connect to mirror server
     socketRef.current = io('http://localhost:3001'); 
     return () => {
       socketRef.current?.close();
@@ -160,32 +128,25 @@ export function SpeakerPage() {
   }, []);
 
   useEffect(() => {
-    for (const { code, instructions, clientRef } of updatedLanguageConfigs) {
       const client = clientRef.current;
       client.updateSession({
         instructions,
         input_audio_transcription: { model: 'whisper-1' },
       });
 
-      client.on('realtime.event', (ev: RealtimeEvent) => handleRealtimeEvent(ev, code));
-      client.on('error', (err: any) => console.error(`${code} client error:`, err));
+      client.on('realtime.event', (ev: RealtimeEvent) => handleRealtimeEvent(ev, 'en'));
+      client.on('error', (err: any) => console.error(`en client error:`, err));
 
       client.on('conversation.updated', ({ delta }: any) => {
-        console.log(`${code} client.on conversation.updated`, delta);
+        console.log(`client.on conversation.updated`, delta);
         if (delta?.audio && delta.audio.byteLength > 0) {
-          console.log(`Emitting audio for ${code}:`, delta.audio);
-          socketRef.current?.emit(`mirrorAudio:${code}`, delta.audio);
+          console.log(`Emitting audio for en:`, delta.audio);
+          socketRef.current?.emit(`mirrorAudio:en`, delta.audio);
         }
       });
-    }
-
     // Cleanup function to reset all clients when the component unmounts or dependencies change
-    return () => {
-      for (const { clientRef } of updatedLanguageConfigs) {
-        clientRef.current.reset();
-      }
-    };
-  }, [instructions]);
+    return () => { client.reset() }
+  }, []); 
 
   const handleRealtimeEvent = (ev: RealtimeEvent, languageCode: string) => {
     // Check if the event type is a completed audio transcript
@@ -210,14 +171,7 @@ export function SpeakerPage() {
       <h1>Speaker Page</h1>
       <div className="card">
         <div className="card-content">
-          <p>Connect to send audio in French, Spanish, English, Mandarin, and Tagalog</p>
-          <div className="tooltip-container">
-            <button className="tooltip-trigger">Instructions</button>
-            <div className="tooltip-content">
-              <p><strong>Manual Mode:</strong> Click 'Start Recording' to begin translating your speech. Click 'Stop Recording' to end the translation.</p>
-              <p><strong>VAD Mode:</strong> Voice Activity Detection automatically starts and stops recording based on your speech. No need to manually control the recording.</p>
-            </div>
-          </div>
+          <p>Connect to send English audio</p>
         </div>
         <div className="toggle-container">
           {isConnected && (
@@ -253,7 +207,7 @@ export function SpeakerPage() {
         {showTranscripts && (
           <table>
             <tbody>
-              {transcripts.map(({ transcript, language }, index) => (
+              {transcripts.map(({ transcript }, index) => (
                 <tr key={index}>
                   <td>
                     <div className="transcript-box">{transcript}</div>

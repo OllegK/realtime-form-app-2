@@ -33,7 +33,6 @@ export function SpeakerPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [canPushToTalk, setCanPushToTalk] = useState(true);
   const [transcripts, setTranscripts] = useState<{ transcript: string; language: string }[]>([]);
-  const [showTranscripts, setShowTranscripts] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const [json, setJson] = useState(JSON_TEMPLATE);
 
@@ -130,8 +129,6 @@ export function SpeakerPage() {
     }
   };
 
-  const toggleTranscriptsVisibility = () => setShowTranscripts((prev) => !prev);
-
   useEffect(() => {
     socketRef.current = io('http://localhost:3001'); 
     return () => {
@@ -170,6 +167,7 @@ export function SpeakerPage() {
       setTranscripts((prev) => [{ transcript: ev.event.transcript, language: languageCode }, ...prev]);
     }
 
+    // why do I need it?
     setRealtimeEvents((prev) => {
       const lastEvent = prev[prev.length - 1];
       if (lastEvent?.event.type === ev.event.type) {
@@ -182,7 +180,6 @@ export function SpeakerPage() {
 
   return (
     <div className="speaker-page">
-      <h1>Speaker Page</h1>
       <div className="card">
         <div className="card-content">
           <p>Connect to send English audio</p>
@@ -217,20 +214,17 @@ export function SpeakerPage() {
         </div>
       </div>
       <div className="transcript-list">
-        <Button label={showTranscripts ? 'Hide Transcripts' : 'Show Transcripts'} onClick={toggleTranscriptsVisibility} />
-        {showTranscripts && (
-          <table>
-            <tbody>
-              {transcripts.map(({ transcript }, index) => (
-                <tr key={index}>
-                  <td>
-                    <div className="transcript-box">{transcript}</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <table>
+          <tbody>
+            {transcripts.map(({ transcript }, index) => (
+              <tr key={index}>
+                <td>
+                  <div className="transcript-box">{transcript}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

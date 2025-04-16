@@ -7,6 +7,15 @@ import { WavRecorder } from '../lib/wavtools/index.js';
 import './Styles.scss';
 import { io, Socket } from 'socket.io-client';
 
+const JSON_TEMPLATE = {
+  name: '',
+  age: '',
+  type: '',
+  subType: '',
+  status: '',
+  freeText: ''
+}
+
 export const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
 
 export const DEFAULT_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17";
@@ -18,7 +27,6 @@ interface RealtimeEvent {
   count?: number;
 }
 
-// SpeakerPage component handles real-time audio recording and streaming for multiple languages
 export function SpeakerPage() {
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -27,6 +35,7 @@ export function SpeakerPage() {
   const [transcripts, setTranscripts] = useState<{ transcript: string; language: string }[]>([]);
   const [showTranscripts, setShowTranscripts] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [json, setJson] = useState(JSON_TEMPLATE);
 
   const wavRecorderRef = useRef<WavRecorder>(
     new WavRecorder({ sampleRate: 24000 })
@@ -94,8 +103,12 @@ export function SpeakerPage() {
       await wavRecorder.pause();
     }
 
-    // Create response for all clients
-    clientRef.current.createResponse();
+    const client = clientRef.current;
+    client.updateSession({
+      instructions: instructions.replace('{PLACEHOLDER}', JSON.stringify(json)),
+    });
+    
+    client.createResponse();
   };
 
   const changeTurnEndType = async (value: string) => {
@@ -130,7 +143,7 @@ export function SpeakerPage() {
   useEffect(() => {
       const client = clientRef.current;
       client.updateSession({
-        instructions,
+        instructions: instructions.replace('{PLACEHOLDER}', JSON.stringify(JSON_TEMPLATE)),
         input_audio_transcription: { model: 'whisper-1' },
       });
 
@@ -149,10 +162,11 @@ export function SpeakerPage() {
   }, []); 
 
   const handleRealtimeEvent = (ev: RealtimeEvent, languageCode: string) => {
-    // Check if the event type is a completed audio transcript
+    console.log('>>>> handleRealtimeEvent..... ev.event.type', ev.event.type);
     if (ev.event.type == "response.audio_transcript.done") {
-      console.log(ev.event.transcript);
+      console.log('>>>> handleRealtimeEvent', ev.event.transcript);
       // Update the transcripts state by adding the new transcript with language code
+      setJson(ev.event.transcript);
       setTranscripts((prev) => [{ transcript: ev.event.transcript, language: languageCode }, ...prev]);
     }
 
